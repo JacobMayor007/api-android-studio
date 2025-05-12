@@ -1,3 +1,4 @@
+require('dotenv').config(); 
 const express = require("express");
 const { MongoClient, ServerApiVersion } = require("mongodb");
 const cors = require("cors");
@@ -6,17 +7,22 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// 1. Define your MongoDB connection URI properly
-const uri = process.env.MONGODB_URI;
+if (!process.env.MONGODB_URI) {
+  console.error("ERROR: MONGODB_URI environment variable is not defined");
+  process.exit(1);
+}
 
-// 2. Create MongoClient with proper options
-const client = new MongoClient(uri, {
-  serverApi: {
-    version: ServerApiVersion.v1,
-    strict: true,
-    deprecationErrors: true,
-  },
-  tls: true
+const client = new MongoClient(process.env.MONGODB_URI, {
+  serverApi: ServerApiVersion.v1,
+  tls: true,
+  minPoolSize: 10,
+  maxPoolSize: 100,
+  retryWrites: true,
+  retryReads: true,
+  directConnection: false,
+  connectTimeoutMS: 30000,
+  socketTimeoutMS: 30000,
+  waitQueueTimeoutMS: 30000,
 });
 
 async function run() {
@@ -27,7 +33,6 @@ async function run() {
     const database = client.db("JBox");
     const collection = database.collection("users");
 
-    // POST endpoint for registration
     app.post("/api/users", async (req, res) => {
       try {
         const { email, password } = req.body;
@@ -46,10 +51,10 @@ async function run() {
             message: "Email already registered"
           });
         }
-    
+            
         const newUser = {
           email,
-          password, // Remember to hash this in production!
+          password,
           createdAt: new Date()
         };
         
@@ -69,7 +74,10 @@ async function run() {
       }
     });
 
-    // POST endpoint for login
+    app.get("/api/users/login", async(req, res)=>{
+      res.send("Login")
+    })
+
     app.post("/api/users/login", async (req, res) => {
       try {
         const { email, password } = req.body;
@@ -83,8 +91,8 @@ async function run() {
           });
         }
 
-        // In production, use bcrypt.compare() here!
-        if (user.password !== password) {
+        const passwordMatch = await (password, user.password);
+        if (!passwordMatch) {
           return res.status(401).json({
             success: false,
             message: "Invalid credentials"
@@ -109,7 +117,6 @@ async function run() {
       res.send("Server is running. POST to /api/users to insert data.");
     });
 
-    // Start server
     const PORT = process.env.PORT || 3000;
     app.listen(PORT, () => {
       console.log(`Server is listening on port ${PORT}`);
@@ -117,7 +124,7 @@ async function run() {
 
   } catch (err) {
     console.error("Database connection error:", err);
-    process.exit(1); // Exit if DB connection fails
+    process.exit(1);
   }
 }
 
